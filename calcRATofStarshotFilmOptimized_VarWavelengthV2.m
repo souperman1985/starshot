@@ -1,9 +1,5 @@
 % Calculate R-A-T of laminate film
-%
-% Copyright (c) 2025 Matthew Campbell
-% Permission is hereby granted, free of charge, to use, copy, modify, and distribute this software for any purpose, with or without modification, provided that the above copyright notice and this permission notice appear in all copies.
-% THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-%
+
 % Start fresh
 clear all
 close all
@@ -103,14 +99,7 @@ Tavg = mean(TvecAvg)
 % Save new spectrum over larger range
 writeFiles = 0;
 if writeFiles == 1
-    if opticalData==1 || opticalData==4 || opticalData==5
-        refIndSrc = 'literatureNK';
-    elseif opticalData==2
-        refIndSrc = 'measuredNKjason';
-    elseif opticalData==3
-        refIndSrc = 'measuredNKpawan';
-    end
-    fNameOut = ['optimizedSpectrumFull_',refIndSrc,'.csv'];
+    fNameOut = 'optimizedSpectrumFull_literatureNK.csv';
     headerString = "simWLnm, simR, simA, simT\n";
     h = fopen(fNameOut,'w');
     fprintf(h,headerString);
@@ -158,3 +147,137 @@ plot(lambdaValsRight,AkDataRight)
 plot(lambdaValsExtrap,AkDataPoly)
 hold off
 set(gca, 'YScale', 'log')
+
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Calculate reflectivity as a function of angle through the acceleration trajectory (for the data range of Caltech)
+lambdaValsContour = linspace(1.0,1.6,300)'; % um
+thetaValsContour = linspace(0,80,101)*(pi/180); % deg-->rad
+
+% calculate optical constants
+AnDataContour = interpFxnKischkatN(lambdaValsContour); % arbs ... find n at the wavelengths corresponding to the beta values we defined above
+AkDataContour = interpFxnKischkatK(lambdaValsContour);
+MnDataContour = interpFxnMoS2n(lambdaValsContour); 
+MkDataContour = interpFxnMoS2k(lambdaValsContour);
+
+% Assemble complex index of refraction
+% BE CAREFUL WHEN ASSEMBLING COMPLEX NUMBERS!  MAKE SURE ALL ARE COLUMN VECTORS!!!
+indComplexInAcontour = AnDataContour + 1i*AkDataContour; % face layers ... here lambda increases down columns 
+indComplexInMcontour = MnDataContour + 1i*MkDataContour; % middle later ... here lambda increases down columns
+nMatInContour = [ones(length(lambdaValsContour),1)  indComplexInAcontour  indComplexInMcontour  indComplexInAcontour  ones(length(lambdaValsContour),1)]; % the index of refraction values depend on temperature! In nMat, lambda increases down columns and layer number increases across rows.
+
+% Calculate R/T/A for larger wavelength range at all angles to find emissivity
+pol = 1;
+[Rmatp, ~, Amatp, ~, ~] = FresnelMat(lambdaValsContour, thetaValsContour, hVec, nMatInContour, pol);
+pol = 0;
+[Rmats, ~, Amats, ~, ~] = FresnelMat(lambdaValsContour, thetaValsContour, hVec, nMatInContour, pol);
+Rmat = mean(cat(3,Rmatp,Rmats),3); % average polarizations
+Amat = mean(cat(3,Amatp,Amats),3); % average polarizations
+
+
+% find the maximum deviation from 0-degree reflectivity up to 23.6 degrees 
+angleNA04 = 23.6;
+indWantAngle = find(thetaValsContour-angleNA04*(pi/180)>=0,1);
+angleHave = thetaValsContour(indWantAngle)*(180/pi)
+indWantLambdaLow = find(lambdaValsContour-lambda0>=0,1);
+lambdaLowHave = lambdaValsContour(indWantLambdaLow)
+indWantLambdaHigh = find(lambdaValsContour-lambdaMaxStarshot>=0,1);
+lambdaHighHave = lambdaValsContour(indWantLambdaHigh)
+
+RnormalEverywhereMat = repmat(Rmat(:,1),1,length(thetaValsContour)); 
+AnormalEverywhereMat = repmat(Amat(:,1),1,length(thetaValsContour)); 
+RpctDiffFromNormalMat = abs(Rmat-RnormalEverywhereMat)./Rmat;
+ApctDiffFromNormalMat = abs(Amat-AnormalEverywhereMat)./Amat;
+
+RmaxPctDiff = max(RpctDiffFromNormalMat(indWantLambdaLow:indWantLambdaHigh,1:indWantAngle),[],2);
+max(RmaxPctDiff)
+AmaxPctDiff = max(ApctDiffFromNormalMat(indWantLambdaLow:indWantLambdaHigh,1:indWantAngle),[],2);
+max(AmaxPctDiff)
+
+figure(100); 
+hold on;
+plot(lambdaValsContour(indWantLambdaLow:indWantLambdaHigh),RmaxPctDiff*100)
+plot(lambdaValsContour(indWantLambdaLow:indWantLambdaHigh),AmaxPctDiff*100)
+hold off;
+xlabel('Wavelength [um]')
+ylabel('PctDiff')
+
+keyboard
+
+% plot it
+figure(20)
+levels = 1000;
+levelVals = [6e-5, 7e-5, 8e-5, 1e-4, 1.5e-4];
+%levelVals = 10.^(-2:1:10);
+hold on;
+contourf(lambdaValsContour,thetaValsContour*(180/pi),Amat',levels,'LineStyle','none')
+[C,h] = contour(lambdaValsContour,thetaValsContour*(180/pi),Amat',levelVals,'LineStyle','-','LineColor','black'); 
+%plot(DWratioPrototype, HTratioPrototype,'wo','MarkerSize',10)
+hold off;
+xlabel('Wavelength [um]')
+ylabel('Incident angle [deg]')
+% xlabel('D [\mum]')
+% ylabel('H [\mum]')
+title('Absorptivity of Optimized Design')
+colorbar;
+clabel(C,h,'FontSize',15)
+h.LineWidth = 2;
+h.LineStyle = ':';
+figHand = gca;
+figHand.XAxis.FontSize = 18;
+figHand.YAxis.FontSize = 18;
+figHand.Title.FontSize = 20;
+figHand.FontWeight = 'bold';
+figHand.FontName = 'Calibri';
+figHand.LineWidth = 1.5; % tick and border thickness
+
+% plot it
+figure(21)
+levels = 1000;
+levelVals = [1.1, 1.25, 1.5, 2,0, 3.0];
+%levelVals = 10.^(-2:1:10);
+hold on;
+contourf(lambdaValsContour,thetaValsContour*(180/pi),Rmat',levels,'LineStyle','none')
+[C,h] = contour(lambdaValsContour,thetaValsContour*(180/pi),Rmat',levelVals,'LineStyle','-','LineColor','black'); 
+%plot(DWratioPrototype, HTratioPrototype,'wo','MarkerSize',10)
+hold off;
+xlabel('Wavelength [um]')
+ylabel('Incident angle [deg]')
+% xlabel('D [\mum]')
+% ylabel('H [\mum]')
+title('Reflectivity of Optimized Design')
+colorbar;
+clabel(C,h,'FontSize',15)
+h.LineWidth = 2;
+h.LineStyle = ':';
+figHand = gca;
+figHand.XAxis.FontSize = 18;
+figHand.YAxis.FontSize = 18;
+figHand.Title.FontSize = 20;
+figHand.FontWeight = 'bold';
+figHand.FontName = 'Calibri';
+figHand.LineWidth = 1.5; % tick and border thickness
+
+
+
+outputContour = 0;
+if outputContour
+    fNameOut = append('proposedOptimizedReflectivityContour.csv'); % g/m2
+    RmatT = Rmat';
+    h = fopen(fNameOut,'w');
+    fprintf(h, ',%7.5e',lambdaValsContour); fprintf(h,'\n'); % header line = x-axis = wavelength [um].  Note the initial blank (leading comma) 
+    for n=length(thetaValsContour):-1:1 % y-axis AND data.  y-axis = angle from normal axis [rad-->deg]
+        fprintf(h,'%7.5e',thetaValsContour(n)*(180/pi)); fprintf(h,' , %7.5e',RmatT(n,:)); fprintf(h,'\n'); % next series of lines
+    end
+
+    fNameOut = append('proposedOptimizedAbsorptivityContour.csv'); % g/m2
+    h = fopen(fNameOut,'w');
+    AmatT = Amat';
+    fprintf(h, ',%7.5e',lambdaValsContour); fprintf(h,'\n'); % header line = x-axis = wavelength [um].  Note the initial blank (leading comma) 
+    for n=length(thetaValsContour):-1:1 % y-axis AND data.  y-axis = angle from normal axis [rad-->deg]
+        fprintf(h,'%7.5e',thetaValsContour(n)*(180/pi)); fprintf(h,' , %7.5e',AmatT(n,:)); fprintf(h,'\n'); % next series of lines
+    end
+end

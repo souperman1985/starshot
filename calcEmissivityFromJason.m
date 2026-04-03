@@ -1,9 +1,4 @@
 % Calculate emissivity
-%
-% Copyright (c) 2025 Matthew Campbell
-% Permission is hereby granted, free of charge, to use, copy, modify, and distribute this software for any purpose, with or without modification, provided that the above copyright notice and this permission notice appear in all copies.
-% THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-%
 % Matthew Campbell
 % 2025-02-21
 
@@ -23,7 +18,7 @@ sigmaBB = (2*pi^5*kB^4)/(15*cLight^2*hPlanck^3); % W/m2-K4
 Toptical = 1000 % K ... for evaluating optical properties. 
 
 % Data selection
-dataSelect = 3;
+dataSelect = 6;
 
 fNameJason = '';
 if dataSelect == 1;     fNameJason = 'BrewerAngleDependentAbs_withMunkhbat';
@@ -35,6 +30,8 @@ elseif dataSelect == 6; fNameJason = 'Optimized_newDesign';
 elseif dataSelect == 7; fNameJason = 'Salary'; 
 elseif dataSelect == 8; fNameJason = 'Santi'; 
 elseif dataSelect == 9; fNameJason = 'Taghavi'; 
+elseif dataSelect ==10; fNameJason = 'Norder Angle Dependent Abs';
+elseif dataSelect ==11; fNameJason = 'Whittam Angle Dependent Abs';
 end
 
 %% Calculate 
@@ -64,3 +61,6 @@ integrandVecNum = IbVec.*EmisSpectrumJason; % W/m3-sr
 integralNum = sum((1/2)*(integrandVecNum(1:end-1)+integrandVecNum(2:end)).*diff(lambdaOutVals)); % ## ...trapezoidal integration
 effEpsJason = integralNum/integralDen; % effective emissivity value design.
 effEpsJason
+
+figure(1)
+plot(lambdaOutVals,EmisSpectrumJason)

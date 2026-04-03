@@ -1,9 +1,5 @@
 % Estimate the absorptivity of different designs in the literature
-%
-% Copyright (c) 2025 Matthew Campbell
-% Permission is hereby granted, free of charge, to use, copy, modify, and distribute this software for any purpose, with or without modification, provided that the above copyright notice and this permission notice appear in all copies.
-% THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-%
+
 % absorptivity = (4*pi*kappa/lambda)*thickness*fillFactor
 
 % Start fresh
@@ -105,8 +101,14 @@ lambdaValsMunk = tempMatrixMunk(:,1); % um ... first column is wavelength
 spectrumMunkK = tempMatrixMunk(:,3); % arbitrary units, (k) extinction coefficient data @ 300 K
 interpFxnMoS2k = griddedInterpolant(lambdaValsMunk,spectrumMunkK,'linear','linear'); % create function to describe data and enable interpolations.  
 
-% 
+% PDMS kappa data
+fNameZhang = "Zhang2020-PDMSnk-5main-1cureRatio.csv";
+tempMatrixZhang = csvread(fNameZhang,2,0); % read the CSV file into a matrix
+lambdaValsZhang = tempMatrixZhang(:,1); % um ... first column is wavelength
+spectrumZhangK = tempMatrixZhang(:,3); % arbitrary units, (k) extinction coefficient data
+interpFxnPDMSk = griddedInterpolant(lambdaValsZhang,spectrumZhangK,'linear','linear'); % create function to describe data and enable interpolations.  
 
+% 
 figure(100)
 hold on
 plot(lambdaSi,kappaSi,'k-')
@@ -115,6 +117,7 @@ plot(SNlambdaData,SNkappaData,'c-')
 plot(TOlambdaData,TOkappaData,'m-')
 plot(lambdaValsK2012,spectrumK2012k,'b-')
 plot(lambdaValsMunk,spectrumMunkK,'r-')
+plot(lambdaValsZhang,spectrumZhangK,'k-')
 %plot(lambdaFitSN,kappaFitSNsimple,'k:')
 plot(lambdaFitSN,kappaFitSN,'k.')
 plot(lambdaFitTO,kappaFitTO,'k.')
@@ -126,7 +129,7 @@ set(gca,'yscale','log')
 xlabel('Wavelength [um]')
 ylabel('Kappa [arbs]')
 title('Extinction coefficient data')
-legend('Si','SiO2','Si3N4','TiO2','Al2O3','MoS2')
+legend('Si','SiO2','Si3N4','TiO2','Al2O3','MoS2','PDMS')
 set(findobj(gcf,'type','axes'),'FontName','Arial','FontSize',15,'FontWeight','Bold', 'LineWidth', 2);
 set(findall(gca, 'Type', 'Line'),'LineWidth',1.5);
 
@@ -441,8 +444,74 @@ set(findobj(gcf,'type','axes'),'FontName','Arial','FontSize',15,'FontWeight','Bo
 set(findall(gca, 'Type', 'Line'),'LineWidth',1.5);
 
 
+% Norder 2025
+disp('---------------')
+% wavelengths
+lambda0 = 1.550; % um ... laser wavelength at zero sail velocity. 
+lambdaFinal = lambda0 * sqrt((1+betaFinal)/(1-betaFinal)); % um
+lambdaValsNorder = linspace(lambda0,lambdaFinal,1000);
+% kappa
+%kappaValsSi3N4Norder = aSN*lambdaValsNorder.^bSN;
+kappaValsSi3N4Norder = interpFxnSNk(lambdaValsNorder); % here we can interpolate within the data; no need to extrapolate. 
+% dimensions
+tSN = 200; % nm
+patternOpen = 0.29; % 29% open according to the SEM image from article
+ff1 = 1-patternOpen; % 
+% absorptivity
+alphaVecNorder2025 = (4*pi./lambdaValsNorder).*(kappaValsSi3N4Norder*tSN*ff1)*(1/1000);
+alphaNorder2025 = mean(alphaVecNorder2025)
+% plot
+figure(10)
+hold on;
+plot(lambdaValsNorder,kappaValsSi3N4Norder);
+hold off;
+set(gca,'yscale','log')
+xlabel('Wavelength [um]')
+ylabel('Kappa [arbs]')
+set(findobj(gcf,'type','axes'),'FontName','Arial','FontSize',15,'FontWeight','Bold', 'LineWidth', 2);
+set(findall(gca, 'Type', 'Line'),'LineWidth',1.5);
+
+
     
     
+
+% Whittam 2025 ... optimized film in Figure 9
+disp('---------------')
+% wavelengths
+lambda0 = 1.0; % um ... laser wavelength at zero sail velocity. 
+lambdaFinal = lambda0 * sqrt((1+betaFinal)/(1-betaFinal)); % um
+lambdaValsWhittam = linspace(lambda0,lambdaFinal,1000);
+% kappa
+kappaValsSiWhittam = interpFxnKappaSi(lambdaValsWhittam); % core
+kappaValsSiO2Whittam = interpFxnSiO2k(lambdaValsWhittam); % shell
+kappaValsPDMSWhittam = interpFxnPDMSk(lambdaValsWhittam); % connecting film
+% dimensions
+r2 = 180.8; % nm ... outer radius of spheres
+r1 = 0.99*r2; % nm ... radius of inner material (Si)
+tTot = 3*r2; % nm ... thickness of connecting PDMS film
+Delta = 2.5*r2; % nm ... pattern period, size of unit cell side. 
+Vcell = tTot*Delta^2; % nm3
+fSi = ((4/3)*pi*r1^3) / Vcell; % volume fraction of Si
+fSiO2 = (((4/3)*pi*r2^3) - ((4/3)*pi*r1^3)) / Vcell; % volume fraction SiO2
+fPDMS = 1 - fSi - fSiO2; 
+% absorptivity
+alphaVecWhittam2025 = (4*pi./lambdaValsWhittam).*(kappaValsSiWhittam*fSi + kappaValsSiO2Whittam*fSiO2 + kappaValsPDMSWhittam*fPDMS)*tTot*(1/1000);
+alphaWhittam2025 = mean(alphaVecWhittam2025)
+% plot
+figure(11)
+hold on;
+plot(lambdaValsWhittam,kappaValsSiWhittam);
+plot(lambdaValsWhittam,kappaValsSiO2Whittam);
+plot(lambdaValsWhittam,kappaValsPDMSWhittam);
+hold off;
+set(gca,'yscale','log')
+xlabel('Wavelength [um]')
+ylabel('Kappa [arbs]')
+set(findobj(gcf,'type','axes'),'FontName','Arial','FontSize',15,'FontWeight','Bold', 'LineWidth', 2);
+set(findall(gca, 'Type', 'Line'),'LineWidth',1.5);
+
+
+ 
 
 
 

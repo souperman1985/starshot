@@ -1,9 +1,5 @@
 % Calculate maximum speed attainable
-%
-% Copyright (c) 2025 Matthew Campbell
-% Permission is hereby granted, free of charge, to use, copy, modify, and distribute this software for any purpose, with or without modification, provided that the above copyright notice and this permission notice appear in all copies.
-% THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
-%
+
 % Start fresh
 clear all
 close all
@@ -30,6 +26,7 @@ rhoSi3N4 = 3200; % kg/m3
 rhoSiO2 = 2030; % kg/m3
 rhoSi = 2330; % kg/m3
 rhoTiO2 = 3700; % kg/m3
+rhoPDMS = 980; % kg/m3
 sigYldAl2O3 = 2e9; % Pa ... was 5e9.  Jen 2011: interpolate to find yield tensile strain is about 1.3% for 50 nm films.  Multiply by E=170GPa. take only 1 significant figure. 
 sigYldMoS2poly = 0.75e9; % Pa ... polycrystalline
 sigYldMoS2cryst = 2.3e9; % Pa ... crystalline monolayer
@@ -37,9 +34,10 @@ sigYldSi3N4 = 14e9; % Pa ... was 10e9
 sigYldSiO2 = 1.5e9; % Pa ... was 2e9
 sigYldSi = 2e9; % Pa ... was 7e9.  new value taken from TSUCHIYA 2005. 
 sigYldTiO2 = 1.1e9; % Pa ... estimate based on yield strength of 151 GPa (Borgese 2012) and tensile yield strain estimate of 0.75% (Tavares2008) 
+sigYldPDMS = 5e6; % Pa
 
 % Calculate parameters for each sail
-dataSelect = 2;
+dataSelect = 6;
 constraintSelect = 1; % for the paper, we're always using #1. 
 
 % data:
@@ -52,6 +50,8 @@ constraintSelect = 1; % for the paper, we're always using #1.
 % 7: Salary
 % 8: Santi
 % 9: Taghavi
+% 10: Norder
+% 11: Whittam
 
 % This study
 % Uses the reflectivity actually measured by Caltech (this is The January 25, 2022 sample).
@@ -233,6 +233,55 @@ if dataSelect == 9
     mechRob = G * (tSiO2*sigYldSiO2 + tSi*sigYldSi) % N/m
 end
 
+% Norder 2025
+if dataSelect == 10
+    lambda0 = 1.55; % um ... laser wavelength at zero sail velocity. 
+    fNameRef = 'Norder2025hybridReflectData.csv'; % First column is lambda (nm), second is reflectivity (0-1)
+    refData = csvread(fNameRef,1,0); % read the CSV file into a matrix
+    refData(:,1) = refData(:,1)*(1/1000); % nm --> um
+    tSN = 200e-9; % m
+    patternOpen = 0.29; % 29% open according to the SEM image from article
+    ff1 = 1-patternOpen; %
+    rhoA = ((rhoSi3N4 * tSN) * ff1)*(1000/1); % g/m2
+    G = 0.45; % from thresholded image.  Draw a long thin box along thinnest pattern and find percent white area. 
+    mechRob = G * (tSN*sigYldSi3N4) % N/m
+end
+
+% Whittam 2025 ... just consider robustness of the PDMS in between the spheres
+if dataSelect == 11
+    lambda0 = 1.0; % um ... laser wavelength at zero sail velocity. 
+    fNameRef = 'Whittam2026RdataPaper.csv'; % First column is lambda (nm), second is reflectivity (0-1)
+    refData = csvread(fNameRef,1,0); % read the CSV file into a matrix
+    refData(:,1) = refData(:,1)*(1/1000); % nm --> um
+    r2 = 180.8; % nm ... outer radius of spheres
+    r1 = 0.99*r2; % nm ... radius of inner material (Si)
+    tTot = 3*r2; % nm ... thickness of connecting PDMS film
+    Delta = 2.5*r2; % nm ... pattern period, size of unit cell side. 
+    Vcell = tTot*Delta^2; % nm3
+    fSi = ((4/3)*pi*r1^3) / Vcell; % volume fraction of Si
+    fSiO2 = (((4/3)*pi*r2^3) - ((4/3)*pi*r1^3)) / Vcell; % volume fraction SiO2
+    fPDMS = 1 - fSi - fSiO2; 
+    % Estimate that the PDMS between the spheres needs to hold the tension force (neglect the top and bottom)
+    % The distance that must be suspended is Delta - r2 = 2.5*r2 - r2 = 1.5*r2.
+    % So the fraction G = (1.5r2)/(2.5r2) = 1.5/2.5 = 3/2 / 5/2 = 3/5 = 0.6
+    G = 0.6;
+    mechRob = G * (tTot*(1/1e9)*sigYldPDMS) % N/m
+    Mtot = Vcell * (1/1e9)^3 * (fSi*rhoSi + fSiO2*rhoSiO2 + fPDMS*rhoPDMS) * (1000/1); % g
+    Atot = Delta^2 * (1/1e9)^2; % m2
+    rhoA = Mtot/Atot % g/m2
+end
+
+
+
+
+
+
+
+
+
+
+
+
 % Sail diameter... assumes spherically curved sail with s=d (radius of curvature equal to diameter)
 if constraintSelect == 1 % specify total mass
     constraintString = "mass";
@@ -253,6 +302,8 @@ if constraintSelect == 2 % specify sail diameter
     Msail = Asail*rhoA; % g
     Mtot = 2*Msail;
 end
+
+AsailPerp
 
 % Light wavelengths at the sail
 lambdaMax = refData(end,1); % um
@@ -275,6 +326,8 @@ RefSpectrum = interpFxnRef(lambdaInVals); % arbs ... find reflectivity at the wa
 
 % Estmate maximum acceleration distance possible with focus on sail, given sail diameter and laser array diameter and wavelength
 Lmax = dSail*dLaser0/(2*lambda0*(1/1e6)) % m
+
+LmaxGm = Lmax*(1/1e9)
 
 % Iteration parameters... want to find the power that takes the sail within "failureMargin" of breaking. 
 failureMargin = 0.001; % 0.1-percent failure margin
@@ -347,6 +400,8 @@ tempVec = find(isnan(distValsA)); % vector of indicees corresponding to NaN, whi
 indexLast = tempVec(1)-1; % last index for which the acceleration distance was less than the diffraction limit of distance
 betaMax = betaVals(indexLast)
 Lfinal = distValsA(indexLast)
+
+LfinalGm = Lfinal*(1/1e9)
 
 % Final calculations
 % Average reflectivity over beta=0.00-0.20 range... see Equation S100 in Campbell 2022 Sup Inf.  This is not just an average over wavelengths; it needs to be weighted by beta or by lambda (for fine enough gridding, these should be equal). 
